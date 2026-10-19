@@ -12,19 +12,48 @@ import SwiftUI
 
 // MARK: - Expanding notch activity
 
+/// Layout of the scan panel. Three candidates are built in so they can be
+/// compared on the real notch; `faceIDLayout` in Boring Notch's defaults picks one.
+struct FaceIDLayout: Equatable {
+    var stacked: Bool          // glyph above text (true) or beside it (false)
+    var glyph: CGFloat
+    var titleSize: CGFloat
+    var subtitleSize: CGFloat
+    var spacing: CGFloat
+    var gap: CGFloat           // equal gap on all four sides (top from the camera housing)
+    var fixedSize: CGSize?     // when set, the panel is this size and content is centred
+
+    static let wide = FaceIDLayout(stacked: false, glyph: 88, titleSize: 28, subtitleSize: 16, spacing: 20, gap: 30, fixedSize: nil)
+    static let panel = FaceIDLayout(stacked: false, glyph: 112, titleSize: 96, subtitleSize: 0, spacing: 28, gap: 24, fixedSize: CGSize(width: 640, height: 190))
+
+    static var current: FaceIDLayout {
+        switch UserDefaults.standard.string(forKey: "faceIDLayout") {
+        case "panel": return .panel
+        case "wide": return .wide
+        default: return .panel   // chosen 2026-10-19
+        }
+    }
+}
+
 enum FaceIDActivityMetrics {
-    /// Every state is one row — glyph, then text — and the notch sizes itself
-    /// around that row with the same gap on all four sides (the top gap is
-    /// measured from the bottom of the camera housing).
-    static let glyph: CGFloat = 60
-    static let rowSpacing: CGFloat = 14
-    static let titleSize: CGFloat = 20
-    static let subtitleSize: CGFloat = 13
-    /// Smallest gap; it grows when the row is narrower than the notch so the
-    /// shape never gets thinner than the camera housing.
-    static let minGap: CGFloat = 20
-    static let bottomRadius: CGFloat = 28
+    static let bottomRadius: CGFloat = 32
     static let spring = Animation.spring(response: 0.42, dampingFraction: 0.86, blendDuration: 0)
+}
+
+/// Free layouts size the panel around their content; the fixed panel instead
+/// gives the content its width (minus the side gap) so long titles shrink to fit.
+private struct FitContent: ViewModifier {
+    let layout: FaceIDLayout
+    func body(content: Content) -> some View {
+        if let fixed = layout.fixedSize {
+            content
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: fixed.width - 2 * layout.gap)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            content.fixedSize()
+        }
+    }
 }
 
 private struct ContentSizeKey: PreferenceKey {
@@ -41,48 +70,73 @@ struct FaceIDActivityOverlay: View {
     @State private var contentSize: CGSize = .zero
 
     var body: some View {
-        let visible = faceID.activity.isVisible && contentSize != .zero
+        let layout = FaceIDLayout.current
+        let shown = faceID.activity.isVisible && contentSize != .zero
         let closed = vm.closedNotchSize
-        let gap = max(FaceIDActivityMetrics.minGap, (closed.width - contentSize.width) / 2)
-        let width = visible ? contentSize.width + 2 * gap : closed.width
-        let height = visible ? closed.height + contentSize.height + 2 * gap : closed.height
+        let size = panelSize(layout: layout, closed: closed)
+        let width = shown ? size.width : closed.width
+        let height = shown ? size.height : closed.height
+        let topPad = layout.fixedSize != nil
+            ? closed.height + (size.height - closed.height - contentSize.height) / 2
+            : closed.height + gap(layout: layout, closed: closed)
 
         ZStack(alignment: .top) {
+            // Solid black at every step of the animation (no fade), so it
+            // always matches the notch and Boring Notch's own black.
             NotchShape(
                 topCornerRadius: cornerRadiusInsets.closed.top,
-                bottomCornerRadius: visible ? FaceIDActivityMetrics.bottomRadius : cornerRadiusInsets.closed.bottom
+                bottomCornerRadius: shown ? FaceIDActivityMetrics.bottomRadius : cornerRadiusInsets.closed.bottom
             )
-            .fill(.black)
+            .fill(Color.black)
             .frame(width: width, height: height)
+            .opacity(faceID.activity.isVisible ? 1 : 0)
 
             if faceID.activity.isVisible {
-                FaceIDActivityContent(activity: faceID.activity, showsText: faceID.showMatchText)
-                    .fixedSize()
+                FaceIDActivityContent(activity: faceID.activity, showsText: faceID.showMatchText, layout: layout)
+                    .modifier(FitContent(layout: layout))
                     .background(GeometryReader { proxy in
                         Color.clear.preference(key: ContentSizeKey.self, value: proxy.size)
                     })
-                    .padding(.top, closed.height + gap)
-                    .opacity(visible ? 1 : 0)
-                    .transition(.opacity.combined(with: .scale(scale: 0.88, anchor: .top)))
+                    .padding(.top, topPad)
+                    .opacity(shown ? 1 : 0)
+                    // Fade in, but vanish at once on the way out so nothing is
+                    // left floating outside the shape as it shrinks.
+                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
             }
         }
         .frame(width: max(width, closed.width), height: height, alignment: .top)
-        .onPreferenceChange(ContentSizeKey.self) { size in
-            contentSize = size
+        // Nothing draws outside the black shape at any point of the animation.
+        .mask(alignment: .top) {
+            NotchShape(
+                topCornerRadius: cornerRadiusInsets.closed.top,
+                bottomCornerRadius: shown ? FaceIDActivityMetrics.bottomRadius : cornerRadiusInsets.closed.bottom
+            )
+            .frame(width: width, height: height)
         }
+        .onPreferenceChange(ContentSizeKey.self) { contentSize = $0 }
         .onChange(of: faceID.activity.isVisible) { _, isVisible in
             if !isVisible { contentSize = .zero }
         }
-        .opacity(faceID.activity.isVisible ? 1 : 0)
         .animation(FaceIDActivityMetrics.spring, value: faceID.activity)
         .animation(FaceIDActivityMetrics.spring, value: contentSize)
         .allowsHitTesting(false)
+    }
+
+    private func gap(layout: FaceIDLayout, closed: CGSize) -> CGFloat {
+        max(layout.gap, (closed.width - contentSize.width) / 2)
+    }
+
+    private func panelSize(layout: FaceIDLayout, closed: CGSize) -> CGSize {
+        if let fixed = layout.fixedSize { return fixed }
+        let g = gap(layout: layout, closed: closed)
+        return CGSize(width: contentSize.width + 2 * g, height: closed.height + contentSize.height + 2 * g)
     }
 }
 
 struct FaceIDActivityContent: View {
     let activity: FaceIDModel.Activity
     let showsText: Bool
+    let layout: FaceIDLayout
 
     var body: some View {
         switch activity {
@@ -90,58 +144,87 @@ struct FaceIDActivityContent: View {
             EmptyView()
 
         case .scanning:
-            row {
-                FaceScanView(side: FaceIDActivityMetrics.glyph)
+            arrange {
+                FaceScanView(side: layout.glyph)
             } text: {
                 title(L10n.t("notch.looking"), color: .white)
             }
 
         case .matched(let similarity):
-            row {
-                SuccessMorph(size: FaceIDActivityMetrics.glyph)
+            matchedRow(similarity: similarity)
+                // The tick sits low in its box and "y" has a descender, so the
+                // row reads low when centred by its frame; lift it to centre the ink.
+                .offset(y: layout.fixedSize != nil ? -8 : 0)
+
+        case .failed(let reason):
+            failedRow(reason: reason)
+
+        case .rejected(let reason):
+            rejectedRow(reason: reason)
+        }
+    }
+
+    private func matchedRow(similarity: Float) -> some View {
+            arrange {
+                SuccessMorph(size: layout.glyph)
                     // The tick only fills the middle of its box; trim the empty
-                    // sides so the tick-and-text group is visually centred.
-                    .padding(.horizontal, -FaceIDActivityMetrics.glyph * 0.2)
+                    // sides so the group is visually centred.
+                    .padding(.horizontal, layout.stacked ? 0 : -layout.glyph * 0.2)
             } text: {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: layout.stacked ? .center : .leading, spacing: 2) {
                     title(L10n.t("notch.itsYou"), color: .white)
+                    // The panel drops the "% match" line so "It's you" can be big.
+                    if layout.subtitleSize > 0 {
                     Text(String(format: L10n.t("notch.match"), Int((similarity * 100).rounded())))
-                        .font(.system(size: FaceIDActivityMetrics.subtitleSize, weight: .medium, design: .rounded))
+                        .font(.system(size: layout.subtitleSize, weight: .medium, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.5))
+                    }
                 }
             }
 
-        case .failed(let reason):
-            row {
-                FaceScanView(tint: .orange, showsSweep: false, side: FaceIDActivityMetrics.glyph)
+    }
+
+    private func failedRow(reason: String) -> some View {
+            arrange {
+                FaceScanView(tint: .orange, showsSweep: false, side: layout.glyph)
             } text: {
                 title(reason.isEmpty ? L10n.t("notch.notRecognised") : reason, color: .white)
             }
             .modifier(Shake())
 
-        case .rejected(let reason):
-            row {
-                FaceScanView(tint: .red, showsSweep: false, side: FaceIDActivityMetrics.glyph)
+    }
+
+    private func rejectedRow(reason: String) -> some View {
+            arrange {
+                FaceScanView(tint: .red, showsSweep: false, side: layout.glyph)
             } text: {
                 title(reason.isEmpty ? L10n.t("notch.notYou") : reason, color: .red)
             }
             .modifier(Shake())
-        }
     }
 
-    private func row<G: View, T: View>(@ViewBuilder glyph: () -> G, @ViewBuilder text: () -> T) -> some View {
-        HStack(spacing: FaceIDActivityMetrics.rowSpacing) {
-            glyph()
-            if showsText { text() }
+    @ViewBuilder
+    private func arrange<G: View, T: View>(@ViewBuilder glyph: () -> G, @ViewBuilder text: () -> T) -> some View {
+        if layout.stacked {
+            VStack(spacing: layout.spacing) {
+                glyph()
+                if showsText { text() }
+            }
+        } else {
+            HStack(spacing: layout.spacing) {
+                glyph()
+                if showsText { text() }
+            }
         }
     }
 
     private func title(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: FaceIDActivityMetrics.titleSize, weight: .semibold))
+            .font(.system(size: layout.titleSize, weight: .semibold))
             .foregroundStyle(color)
             .lineLimit(1)
+            .minimumScaleFactor(0.4)
     }
 }
 
