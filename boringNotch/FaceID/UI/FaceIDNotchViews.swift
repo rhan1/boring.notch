@@ -13,45 +13,69 @@ import SwiftUI
 // MARK: - Expanding notch activity
 
 enum FaceIDActivityMetrics {
-    /// Approved 2026-10-19: grow past the physical notch to catch the eye.
-    static let expandedWidth: CGFloat = 260
-    static let expandedHeight: CGFloat = 132
-    static let bottomRadius: CGFloat = 26
+    /// Every state is one row — glyph, then text — and the notch sizes itself
+    /// around that row with the same gap on all four sides (the top gap is
+    /// measured from the bottom of the camera housing).
+    static let glyph: CGFloat = 60
+    static let rowSpacing: CGFloat = 14
+    static let titleSize: CGFloat = 20
+    static let subtitleSize: CGFloat = 13
+    /// Smallest gap; it grows when the row is narrower than the notch so the
+    /// shape never gets thinner than the camera housing.
+    static let minGap: CGFloat = 20
+    static let bottomRadius: CGFloat = 28
     static let spring = Animation.spring(response: 0.42, dampingFraction: 0.86, blendDuration: 0)
+}
+
+private struct ContentSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
 }
 
 struct FaceIDActivityOverlay: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var faceID = FaceIDModel.shared
+    @State private var contentSize: CGSize = .zero
 
     var body: some View {
-        let visible = faceID.activity.isVisible
+        let visible = faceID.activity.isVisible && contentSize != .zero
         let closed = vm.closedNotchSize
-        let width = visible ? max(FaceIDActivityMetrics.expandedWidth, closed.width) : closed.width
-        let height = visible ? FaceIDActivityMetrics.expandedHeight : closed.height
+        let gap = max(FaceIDActivityMetrics.minGap, (closed.width - contentSize.width) / 2)
+        let width = visible ? contentSize.width + 2 * gap : closed.width
+        let height = visible ? closed.height + contentSize.height + 2 * gap : closed.height
 
-        NotchShape(
-            topCornerRadius: cornerRadiusInsets.closed.top,
-            bottomCornerRadius: visible ? FaceIDActivityMetrics.bottomRadius : cornerRadiusInsets.closed.bottom
-        )
-        .fill(.black)
-        .frame(width: width, height: height)
-        .overlay(alignment: .top) {
-            // Content sits in the band below the camera housing, centred in it.
-            VStack(spacing: 0) {
-                Color.clear.frame(height: closed.height)
-                ZStack {
-                    if visible {
-                        FaceIDActivityContent(activity: faceID.activity, showsText: faceID.showMatchText)
-                            .transition(.opacity.combined(with: .scale(scale: 0.88)))
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+        ZStack(alignment: .top) {
+            NotchShape(
+                topCornerRadius: cornerRadiusInsets.closed.top,
+                bottomCornerRadius: visible ? FaceIDActivityMetrics.bottomRadius : cornerRadiusInsets.closed.bottom
+            )
+            .fill(.black)
             .frame(width: width, height: height)
+
+            if faceID.activity.isVisible {
+                FaceIDActivityContent(activity: faceID.activity, showsText: faceID.showMatchText)
+                    .fixedSize()
+                    .background(GeometryReader { proxy in
+                        Color.clear.preference(key: ContentSizeKey.self, value: proxy.size)
+                    })
+                    .padding(.top, closed.height + gap)
+                    .opacity(visible ? 1 : 0)
+                    .transition(.opacity.combined(with: .scale(scale: 0.88, anchor: .top)))
+            }
         }
-        .opacity(visible ? 1 : 0)
+        .frame(width: max(width, closed.width), height: height, alignment: .top)
+        .onPreferenceChange(ContentSizeKey.self) { size in
+            contentSize = size
+        }
+        .onChange(of: faceID.activity.isVisible) { _, isVisible in
+            if !isVisible { contentSize = .zero }
+        }
+        .opacity(faceID.activity.isVisible ? 1 : 0)
         .animation(FaceIDActivityMetrics.spring, value: faceID.activity)
+        .animation(FaceIDActivityMetrics.spring, value: contentSize)
         .allowsHitTesting(false)
     }
 }
@@ -66,48 +90,58 @@ struct FaceIDActivityContent: View {
             EmptyView()
 
         case .scanning:
-            FaceScanView()
+            row {
+                FaceScanView(side: FaceIDActivityMetrics.glyph)
+            } text: {
+                title(L10n.t("notch.looking"), color: .white)
+            }
 
         case .matched(let similarity):
-            HStack(spacing: 12) {
-                SuccessMorph()
-                if showsText {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(L10n.t("notch.itsYou"))
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
-                        Text(String(format: L10n.t("notch.match"), Int((similarity * 100).rounded())))
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                    .fixedSize()
+            row {
+                SuccessMorph(size: FaceIDActivityMetrics.glyph)
+                    // The tick only fills the middle of its box; trim the empty
+                    // sides so the tick-and-text group is visually centred.
+                    .padding(.horizontal, -FaceIDActivityMetrics.glyph * 0.2)
+            } text: {
+                VStack(alignment: .leading, spacing: 1) {
+                    title(L10n.t("notch.itsYou"), color: .white)
+                    Text(String(format: L10n.t("notch.match"), Int((similarity * 100).rounded())))
+                        .font(.system(size: FaceIDActivityMetrics.subtitleSize, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.5))
                 }
             }
 
         case .failed(let reason):
-            resultRow(tint: .orange, text: reason.isEmpty ? L10n.t("notch.notRecognised") : reason, textColor: .white)
+            row {
+                FaceScanView(tint: .orange, showsSweep: false, side: FaceIDActivityMetrics.glyph)
+            } text: {
+                title(reason.isEmpty ? L10n.t("notch.notRecognised") : reason, color: .white)
+            }
+            .modifier(Shake())
 
         case .rejected(let reason):
-            resultRow(tint: .red, text: reason.isEmpty ? L10n.t("notch.notYou") : reason, textColor: .red)
+            row {
+                FaceScanView(tint: .red, showsSweep: false, side: FaceIDActivityMetrics.glyph)
+            } text: {
+                title(reason.isEmpty ? L10n.t("notch.notYou") : reason, color: .red)
+            }
+            .modifier(Shake())
         }
     }
 
-    private func resultRow(tint: Color, text: String, textColor: Color) -> some View {
-        HStack(spacing: 10) {
-            FaceScanView(tint: tint, showsSweep: false)
-                .scaleEffect(0.78)
-                .frame(width: 44, height: 44)
-            if showsText {
-                Text(text)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(textColor)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: 150, alignment: .leading)
-            }
+    private func row<G: View, T: View>(@ViewBuilder glyph: () -> G, @ViewBuilder text: () -> T) -> some View {
+        HStack(spacing: FaceIDActivityMetrics.rowSpacing) {
+            glyph()
+            if showsText { text() }
         }
-        .modifier(Shake())
+    }
+
+    private func title(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: FaceIDActivityMetrics.titleSize, weight: .semibold))
+            .foregroundStyle(color)
+            .lineLimit(1)
     }
 }
 

@@ -56,12 +56,13 @@ struct FaceScanView: View {
     /// The up/down sweep line reads as "actively looking"; it is dropped for the
     /// failure and rejection states.
     var showsSweep: Bool = true
+    /// Glyph size in points; the notch activity draws it larger than FaceMac did.
+    var side: CGFloat = 54
 
     @State private var breathe = false
-    @State private var sweep: CGFloat = -17
+    @State private var sweep: CGFloat = -1
 
-    private let side: CGFloat = 54
-    private let lineWidth: CGFloat = 3.0
+    private var lineWidth: CGFloat { max(3.0, side / 18) }
 
     var body: some View {
         ZStack {
@@ -80,7 +81,7 @@ struct FaceScanView: View {
                         )
                     )
                     .frame(width: side, height: 2.0)
-                    .offset(y: sweep)
+                    .offset(y: sweep * side * 0.315)
                     .mask(RoundedRectangle(cornerRadius: 10, style: .continuous).frame(width: side, height: side))
             }
         }
@@ -90,7 +91,7 @@ struct FaceScanView: View {
                 breathe = true
             }
             withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
-                sweep = 17
+                sweep = 1
             }
         }
     }
@@ -98,6 +99,8 @@ struct FaceScanView: View {
 
 /// iPhone-like success: the scan brackets collapse while a checkmark draws on.
 struct SuccessMorph: View {
+    /// Overall size in points (FaceMac's original was 44).
+    var size: CGFloat = 44
     @State private var progress: CGFloat = 0
 
     var body: some View {
@@ -105,9 +108,9 @@ struct SuccessMorph: View {
             FaceScanShape()
                 .stroke(
                     NotchPalette.green,
-                    style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round)
+                    style: StrokeStyle(lineWidth: max(2.8, size / 15), lineCap: .round, lineJoin: .round)
                 )
-                .frame(width: 42, height: 42)
+                .frame(width: size * 0.95, height: size * 0.95)
                 .scaleEffect(1 - 0.45 * progress)
                 .opacity(Double(max(0, 1 - progress * 1.7)))
 
@@ -115,11 +118,11 @@ struct SuccessMorph: View {
                 .trim(from: 0, to: progress)
                 .stroke(
                     NotchPalette.green,
-                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                    style: StrokeStyle(lineWidth: max(3, size / 14), lineCap: .round, lineJoin: .round)
                 )
-                .frame(width: 26, height: 26)
+                .frame(width: size * 0.6, height: size * 0.6)
         }
-        .frame(width: 44, height: 44)
+        .frame(width: size, height: size)
         .onAppear {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.68)) {
                 progress = 1

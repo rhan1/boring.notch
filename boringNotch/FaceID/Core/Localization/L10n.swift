@@ -63,7 +63,7 @@ public enum L10n {
         "window.test": "Test Recognition",
         "window.settings": "FaceMac Settings",
 
-        "notch.looking": "Looking…",
+        "notch.looking": "Looking for you",
         "notch.itsYou": "It's you",
         "notch.match": "%d%% match",
         "notch.notRecognised": "Face not recognised",

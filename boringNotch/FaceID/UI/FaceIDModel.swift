@@ -129,6 +129,16 @@ final class FaceIDModel: ObservableObject {
             (try? self?.keychain.password()) ?? nil
         }
 
+        // `notifyutil`-free preview hook for checking the animation by eye:
+        // post "com.facemac.previewActivity" as a distributed notification.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.facemac.previewActivity"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.previewActivity() }
+        }
+
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
