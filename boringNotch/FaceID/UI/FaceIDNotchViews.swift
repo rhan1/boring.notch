@@ -46,7 +46,8 @@ struct FaceIDLayout: Equatable {
         }
         switch UserDefaults.standard.string(forKey: "faceIDLayout") {
         case "wide": return .wide
-        default: return .panel   // chosen 2026-10-19
+        case "big": return .panel
+        default: return .labelled   // chosen 2026-10-19: big icon, "FACE ID" label + status
         }
     }
 }
