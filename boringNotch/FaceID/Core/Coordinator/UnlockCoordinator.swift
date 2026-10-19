@@ -1,3 +1,5 @@
+import Carbon.HIToolbox
+import CoreGraphics
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -417,24 +419,52 @@ public final class UnlockCoordinator {
             return
         }
 
+        guard let password = (try? keychain.password()) ?? nil else {
+            state = .failed(reason: L10n.t("failure.noPassword"))
+            stopScanning()
+            return
+        }
+        stopScanning()
+        state = .armed
+        typePassword(password, attempt: 1)
+    }
+
+    /// Types the password into the lock screen and checks that it worked.
+    ///
+    /// The lock screen hides its password field until a key arrives, and keys
+    /// that land while it is still hidden are dropped (loginwindow logs "View is
+    /// hidden password field length = 0"). So: tap Shift to reveal the field,
+    /// give it a moment, clear it, type at a steady pace, press Return — then
+    /// look again and retry if the session is still locked.
+    private func typePassword(_ password: String, attempt: Int) {
+        guard LockWatcher.isScreenLocked else { return }
         do {
-            guard let password = try keychain.password() else {
-                state = .failed(reason: L10n.t("failure.noPassword"))
-                stopScanning()
+            try injector.press(virtualKey: CGKeyCode(kVK_Shift))
+        } catch {
+            state = .failed(reason: String(format: L10n.t("failure.couldNotType"), "\(error)"))
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            guard let self, LockWatcher.isScreenLocked else { return }
+            do {
+                // Touch-to-scan means a stray space may already be in the field.
+                try self.injector.clearFocusedField()
+                try self.injector.type(password, interval: 0.012)
+                try self.injector.pressReturn()
+                Log.app.info("typed password (attempt \(attempt, privacy: .public))")
+            } catch {
+                self.state = .failed(reason: String(format: L10n.t("failure.couldNotType"), "\(error)"))
                 return
             }
-            // Touch-to-scan means a stray space may already be in the field.
-            try injector.clearFocusedField()
-            try injector.type(password)
-            try injector.pressReturn()
-            stopScanning()
-            state = .armed
-        } catch {
-            stopScanning()
-            if attempts >= settings.maxAttempts {
-                state = .failed(reason: String(format: L10n.t("failure.giveUp"), attempts))
-            } else {
-                state = .failed(reason: String(format: L10n.t("failure.couldNotType"), "\(error)"))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                guard let self, LockWatcher.isScreenLocked else { return }
+                if attempt < 3 {
+                    Log.app.info("still locked after typing, retrying")
+                    self.typePassword(password, attempt: attempt + 1)
+                } else {
+                    Log.app.info("still locked after \(attempt, privacy: .public) attempts")
+                    self.state = .failed(reason: String(format: L10n.t("failure.giveUp"), attempt))
+                }
             }
         }
     }

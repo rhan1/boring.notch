@@ -22,7 +22,7 @@ public final class KeyboardInjector {
         return AXIsProcessTrustedWithOptions(options)
     }
 
-    public func type(_ text: String) throws {
+    public func type(_ text: String, interval: TimeInterval = 0) throws {
         guard Self.isAccessibilityTrusted else {
             throw InjectError.accessibilityNotTrusted
         }
@@ -40,6 +40,7 @@ public final class KeyboardInjector {
             keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
             keyDown.post(tap: .cghidEventTap)
             keyUp.post(tap: .cghidEventTap)
+            if interval > 0 { usleep(useconds_t(interval * 1_000_000)) }
         }
     }
 
