@@ -19,7 +19,10 @@ fi
 
 # 2. The fork is not sandboxed: bring its settings out of the sandbox container once.
 if [[ ! -f "$BACKUP/.prefs-migrated" && -f "$CONTAINER/Preferences/theboringteam.boringnotch.plist" ]]; then
-  defaults export "$CONTAINER/Preferences/theboringteam.boringnotch.plist" - | defaults import theboringteam.boringnotch -
+  # Import by file path: `defaults import <bundle-id>` would write back into the
+  # sandbox container (where the official app reads), not where this build reads.
+  defaults export "$CONTAINER/Preferences/theboringteam.boringnotch.plist" - \
+    | defaults import "$HOME/Library/Preferences/theboringteam.boringnotch.plist" -
   if [[ -d "$CONTAINER/Application Support/boringNotch" ]]; then
     ditto "$CONTAINER/Application Support/boringNotch" "$SUPPORT/boringNotch"
   fi
