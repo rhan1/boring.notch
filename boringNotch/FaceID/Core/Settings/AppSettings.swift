@@ -12,6 +12,7 @@ public final class AppSettings {
         case unlockCooldown
         case requiredFrames
         case scanTimeout
+        case promptScanTimeout
         case retryButtonOffsetX
         case retryButtonVerticalFraction
         case retryButtonSize
@@ -38,6 +39,7 @@ public final class AppSettings {
             Key.unlockCooldown.rawValue: 3.0,
             Key.requiredFrames.rawValue: 3,
             Key.scanTimeout.rawValue: 5.0,
+            Key.promptScanTimeout.rawValue: 300.0,
             Key.retryButtonOffsetX.rawValue: 0.0,
             Key.retryButtonVerticalFraction.rawValue: 0.852,
             Key.retryButtonSize.rawValue: 54.0,
@@ -89,6 +91,13 @@ public final class AppSettings {
     public var requiredFrames: Int {
         get { max(defaults.integer(forKey: Key.requiredFrames.rawValue), 1) }
         set { defaults.set(newValue, forKey: Key.requiredFrames.rawValue) }
+    }
+
+    /// For sudo and password prompts: keep looking until a face shows up, so a
+    /// prompt that appears while the user is away is answered when they return.
+    public var promptScanTimeout: TimeInterval {
+        get { defaults.double(forKey: Key.promptScanTimeout.rawValue) }
+        set { defaults.set(newValue, forKey: Key.promptScanTimeout.rawValue) }
     }
 
     /// How long the camera stays on for a single recognition attempt.

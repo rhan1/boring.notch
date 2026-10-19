@@ -34,8 +34,8 @@ if [[ ! -d "$SUPPORT/FaceMac/FaceEmbedding.mlmodelc" ]]; then
 fi
 
 # 4. Only one app may own the Face ID socket.
-pkill -x FaceMac 2>/dev/null || true
-pkill -x boringNotch 2>/dev/null || true
+pkill -f "FaceMac.app/Contents/MacOS/FaceMac" 2>/dev/null || true
+osascript -e 'tell application id "theboringteam.boringnotch" to quit' 2>/dev/null || true; pkill -f "boringNotch.app/Contents/MacOS/boringNotch" 2>/dev/null || true
 sleep 1
 
 # 5. Swap the app. A new signature invalidates old permission grants; clear them

@@ -215,6 +215,15 @@ public final class UnlockCoordinator {
         }
     }
 
+    /// Abandons a pending prompt scan — the prompt was answered by hand,
+    /// closed, or sudo was cancelled.
+    public func cancelVerify() {
+        guard verifyCompletion != nil else { return }
+        Log.app.info("verify cancelled")
+        stopScanning()
+        state = settings.isEnabled ? .armed : .disabled
+    }
+
     private func finishVerify(_ ok: Bool) {
         guard let completion = verifyCompletion else { return }
         verifyCompletion = nil
@@ -242,7 +251,8 @@ public final class UnlockCoordinator {
             }
         }
         scanTimeoutWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + settings.scanTimeout, execute: work)
+        let timeout = verifyCompletion != nil ? settings.promptScanTimeout : settings.scanTimeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: work)
     }
 
     private func cancelScanTimeout() {
@@ -344,7 +354,8 @@ public final class UnlockCoordinator {
         // timeout.
         if best.similarity < settings.rejectionThreshold {
             lowScoreStreak += 1
-            if lowScoreStreak >= 3 {
+            // A prompt waits for its owner: someone else walking past is ignored.
+            if lowScoreStreak >= 3, verifyCompletion == nil {
                 stopScanning()
                 state = .rejected
                 Log.app.info("rejected: best=\(best.similarity, privacy: .public)")

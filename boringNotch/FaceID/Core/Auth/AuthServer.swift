@@ -16,6 +16,9 @@ public final class AuthServer {
 
     /// Asked on the main queue; must call the completion exactly once.
     public var verify: ((_ reason: String, _ completion: @escaping (Bool) -> Void) -> Void)?
+    /// Called on the main queue when the client hangs up before an answer
+    /// (sudo was cancelled or answered another way).
+    public var cancel: (() -> Void)?
 
     private var listenFD: Int32 = -1
     private var source: DispatchSourceRead?
@@ -100,14 +103,46 @@ public final class AuthServer {
         }
         let reason = parts.dropFirst().joined(separator: " ")
 
+        let request = Request(fd: client)
+        // Watch for the client going away while the camera is still looking.
+        let hangup = DispatchSource.makeReadSource(fileDescriptor: client, queue: queue)
+        hangup.setEventHandler { [weak self] in
+            var byte: UInt8 = 0
+            guard read(client, &byte, 1) <= 0 else { return }
+            hangup.cancel()
+            DispatchQueue.main.async {
+                guard request.finish() else { return }
+                Log.app.info("auth: client hung up")
+                self?.cancel?()
+                close(client)
+            }
+        }
+        request.hangup = hangup
+        hangup.resume()
+
         DispatchQueue.main.async { [weak self] in
             guard let verify = self?.verify else {
-                Self.reply(client, false)
+                if request.finish() { Self.reply(client, false) }
                 return
             }
             verify(reason) { ok in
+                guard request.finish() else { return }
                 Self.reply(client, ok)
             }
+        }
+    }
+
+    /// One pending request; `finish()` is true exactly once.
+    private final class Request {
+        let fd: Int32
+        var hangup: DispatchSourceRead?
+        private var done = false
+        init(fd: Int32) { self.fd = fd }
+        func finish() -> Bool {
+            guard !done else { return false }
+            done = true
+            hangup?.cancel()
+            return true
         }
     }
 

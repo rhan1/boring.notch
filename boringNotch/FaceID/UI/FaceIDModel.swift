@@ -123,6 +123,8 @@ final class FaceIDModel: ObservableObject {
             self.coordinator.verifyUser(reason: reason, completion: completion)
         }
         promptWatcher.verify = authServer.verify
+        authServer.cancel = { [weak self] in self?.coordinator.cancelVerify() }
+        promptWatcher.cancel = { [weak self] in self?.coordinator.cancelVerify() }
         promptWatcher.password = { [weak self] in
             (try? self?.keychain.password()) ?? nil
         }

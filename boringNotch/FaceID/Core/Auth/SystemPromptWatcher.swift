@@ -16,6 +16,8 @@ public final class SystemPromptWatcher {
     public var verify: ((_ reason: String, _ completion: @escaping (Bool) -> Void) -> Void)?
     /// Supplies the saved login password when a dialog is about to be filled.
     public var password: (() -> String?)?
+    /// Called when the dialog being scanned for closes before a match.
+    public var cancel: (() -> Void)?
 
     private static let trustedOwners: [String: String] = [
         "SecurityAgent": "/System/Library/Frameworks/Security.framework/Versions/A/MachServices/SecurityAgent.bundle/Contents/MacOS/SecurityAgent",
@@ -26,6 +28,8 @@ public final class SystemPromptWatcher {
     private var timer: Timer?
     private var handled = Set<Int>()
     private var busy = false
+    /// The dialog window a scan is currently answering.
+    private var pendingWindow: Int?
 
     public init() {}
 
@@ -48,8 +52,17 @@ public final class SystemPromptWatcher {
     }
 
     private func tick() {
-        guard !busy, !LockWatcher.isScreenLocked else { return }
+        guard !LockWatcher.isScreenLocked else { return }
         let prompts = Self.currentPrompts()
+        if busy {
+            // Typed by hand or cancelled: stop looking.
+            if let pending = pendingWindow, !prompts.contains(where: { $0.windowNumber == pending }) {
+                pendingWindow = nil
+                busy = false
+                cancel?()
+            }
+            return
+        }
         // Forget windows that have closed so a re-shown dialog scans again.
         handled.formIntersection(prompts.map(\.windowNumber))
         guard let prompt = prompts.first(where: { !handled.contains($0.windowNumber) }) else { return }
@@ -57,9 +70,12 @@ public final class SystemPromptWatcher {
         guard let verify, Self.findPasswordTarget(pid: prompt.pid, allowUsePassword: false) != .notAPasswordPrompt else { return }
 
         busy = true
+        pendingWindow = prompt.windowNumber
         Log.app.info("system password prompt from \(prompt.owner, privacy: .public)")
         verify("dialog \(prompt.owner)") { [weak self] ok in
             guard let self else { return }
+            guard self.pendingWindow == prompt.windowNumber else { return }
+            self.pendingWindow = nil
             if ok { self.fill(pid: prompt.pid, attempt: 0) } else { self.busy = false }
         }
     }
