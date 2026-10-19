@@ -1,3 +1,6 @@
+// From FaceMac by c1osed1 — https://github.com/c1osed1/FaceMac (GPL-3.0).
+// Adapted for Boring Notch.
+
 import Foundation
 
 public extension Enrollment {

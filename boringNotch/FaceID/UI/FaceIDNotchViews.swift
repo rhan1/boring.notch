@@ -22,13 +22,29 @@ struct FaceIDLayout: Equatable {
     var spacing: CGFloat
     var gap: CGFloat           // equal gap on all four sides (top from the camera housing)
     var fixedSize: CGSize?     // when set, the panel is this size and content is centred
+    var weight: Font.Weight = .semibold
+    var titleOpacity: Double = 1
+    var label: Bool = false    // small "FACE ID" label above the status
+    var labelSize: CGFloat = 13
 
     static let wide = FaceIDLayout(stacked: false, glyph: 88, titleSize: 28, subtitleSize: 16, spacing: 20, gap: 30, fixedSize: nil)
     static let panel = FaceIDLayout(stacked: false, glyph: 112, titleSize: 96, subtitleSize: 0, spacing: 28, gap: 24, fixedSize: CGSize(width: 640, height: 190))
 
+    // Text treatments for the panel (round 4): the icon stays big, the text calms down.
+    static let refined = FaceIDLayout(stacked: false, glyph: 112, titleSize: 34, subtitleSize: 0, spacing: 26, gap: 24, fixedSize: CGSize(width: 640, height: 190), weight: .medium, titleOpacity: 0.92)
+    static let light = FaceIDLayout(stacked: false, glyph: 112, titleSize: 44, subtitleSize: 0, spacing: 26, gap: 24, fixedSize: CGSize(width: 640, height: 190), weight: .light, titleOpacity: 0.95)
+    static let labelled = FaceIDLayout(stacked: false, glyph: 112, titleSize: 30, subtitleSize: 0, spacing: 26, gap: 24, fixedSize: CGSize(width: 640, height: 190), weight: .medium, titleOpacity: 0.95, label: true, labelSize: 13)
+    static let iconLed = FaceIDLayout(stacked: true, glyph: 96, titleSize: 15, subtitleSize: 0, spacing: 10, gap: 24, fixedSize: CGSize(width: 640, height: 190), weight: .regular, titleOpacity: 0.7)
+
     static var current: FaceIDLayout {
+        switch UserDefaults.standard.string(forKey: "faceIDText") {
+        case "refined": return .refined
+        case "light": return .light
+        case "labelled": return .labelled
+        case "iconLed": return .iconLed
+        default: break
+        }
         switch UserDefaults.standard.string(forKey: "faceIDLayout") {
-        case "panel": return .panel
         case "wide": return .wide
         default: return .panel   // chosen 2026-10-19
         }
@@ -154,7 +170,7 @@ struct FaceIDActivityContent: View {
             matchedRow(similarity: similarity)
                 // The tick sits low in its box and "y" has a descender, so the
                 // row reads low when centred by its frame; lift it to centre the ink.
-                .offset(y: layout.fixedSize != nil ? -8 : 0)
+                .offset(y: layout.fixedSize != nil && layout.titleSize > 60 ? -8 : 0)
 
         case .failed(let reason):
             failedRow(reason: reason)
@@ -162,6 +178,13 @@ struct FaceIDActivityContent: View {
         case .rejected(let reason):
             rejectedRow(reason: reason)
         }
+    }
+
+    /// "Hi, <first name>" — the first name of this Mac's account, so each person sees
+    /// their own name; falls back to "It's you".
+    static var greeting: String {
+        let first = NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
+        return first.isEmpty ? L10n.t("notch.itsYou") : "Hi, \(first)"
     }
 
     private func matchedRow(similarity: Float) -> some View {
@@ -172,7 +195,7 @@ struct FaceIDActivityContent: View {
                     .padding(.horizontal, layout.stacked ? 0 : -layout.glyph * 0.2)
             } text: {
                 VStack(alignment: layout.stacked ? .center : .leading, spacing: 2) {
-                    title(L10n.t("notch.itsYou"), color: .white)
+                    title(Self.greeting, color: .white)
                     // The panel drops the "% match" line so "It's you" can be big.
                     if layout.subtitleSize > 0 {
                     Text(String(format: L10n.t("notch.match"), Int((similarity * 100).rounded())))
@@ -214,15 +237,27 @@ struct FaceIDActivityContent: View {
         } else {
             HStack(spacing: layout.spacing) {
                 glyph()
-                if showsText { text() }
+                if showsText {
+                    if layout.label {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("FACE ID")
+                                .font(.system(size: layout.labelSize, weight: .semibold))
+                                .tracking(1.4)
+                                .foregroundStyle(.white.opacity(0.45))
+                            text()
+                        }
+                    } else {
+                        text()
+                    }
+                }
             }
         }
     }
 
     private func title(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: layout.titleSize, weight: .semibold))
-            .foregroundStyle(color)
+            .font(.system(size: layout.titleSize, weight: layout.weight))
+            .foregroundStyle(color.opacity(layout.titleOpacity))
             .lineLimit(1)
             .minimumScaleFactor(0.4)
     }

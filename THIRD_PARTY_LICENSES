@@ -431,3 +431,17 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 This Source Code Form is "Incompatible With Secondary Licenses", as
 defined by the Mozilla Public License, v. 2.0.
+
+
+================================================================================
+FaceMac — https://github.com/c1osed1/FaceMac
+Copyright (c) c1osed1
+License: GNU General Public License v3.0 (same as this project; see LICENSE)
+Used in: boringNotch/FaceID/ (recognition engine, enrollment, liveness, lock-screen
+unlock, Face ID glyph) and faceid/pam/.
+
+================================================================================
+SFace face-recognition model — https://github.com/opencv/opencv_zoo
+License: Apache License 2.0 — https://www.apache.org/licenses/LICENSE-2.0
+Used as the compiled Core ML model FaceEmbedding.mlmodelc (shipped in releases,
+fetched by faceid/scripts/fetch-model.sh).

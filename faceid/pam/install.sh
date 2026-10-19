@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Hook FaceMac into sudo. Adds pam_facemac ahead of Touch ID in
 # /etc/pam.d/sudo_local (kept by macOS across updates).
-#   install:   sudo ~/Projects/FaceMac/pam/install.sh
-#   uninstall: sudo ~/Projects/FaceMac/pam/install.sh --uninstall
+#   install:   sudo ./install.sh   (from Terminal with Full Disk Access — macOS 26 requires it to edit /etc/pam.d)
+#   uninstall: sudo ./install.sh --uninstall
 # macOS 26 forbids creating files in /etc/pam.d, so sudo_local is rewritten in
 # place and the backup lives next to the module. Every step is checked, and a
 # sudo that cannot start PAM afterwards triggers an automatic restore.

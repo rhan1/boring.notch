@@ -26,6 +26,9 @@ Say hello to **Boring Notch**, the coolest way to make your MacBook’s notch th
   <img src="https://github.com/user-attachments/assets/2d5f69c1-6e7b-4bc2-a6f1-bb9e27cf88a8" alt="Demo GIF" />
 </p>
 
+> [!NOTE]
+> **This fork adds Face ID.** Look at your notch to unlock the lock screen, approve `sudo` and fill macOS password prompts. The face recognition comes from **[FaceMac](https://github.com/c1osed1/FaceMac) by [c1osed1](https://github.com/c1osed1)**. Setup, credits and security notes are in **[faceid/README.md](faceid/README.md)**.
+
 <!--https://github.com/user-attachments/assets/19b87973-4b3a-4853-b532-7e82d1d6b040-->
 ---
 <!--## Table of Contents

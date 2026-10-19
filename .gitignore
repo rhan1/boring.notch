@@ -55,3 +55,6 @@ build/
 
 .build/
 .backup/
+faceid/model/
+faceid/pam/*.so
+faceid/pam/pamcheck
