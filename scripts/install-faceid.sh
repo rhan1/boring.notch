@@ -39,7 +39,8 @@ fi
 # 4. Only one app may own the Face ID socket.
 pkill -f "FaceMac.app/Contents/MacOS/FaceMac" 2>/dev/null || true
 osascript -e 'tell application id "theboringteam.boringnotch" to quit' 2>/dev/null || true; pkill -f "boringNotch.app/Contents/MacOS/boringNotch" 2>/dev/null || true
-sleep 1
+# Wait until the old copy has fully exited before starting the new one.
+for _ in $(seq 1 20); do pgrep -f "boringNotch.app/Contents/MacOS/boringNotch" >/dev/null || break; sleep 0.5; done
 
 # 5. Swap the app. A new signature invalidates old permission grants; clear them
 #    once so macOS asks again instead of silently refusing.

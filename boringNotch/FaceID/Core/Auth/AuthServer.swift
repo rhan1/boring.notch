@@ -21,6 +21,9 @@ public final class AuthServer {
     public var cancel: (() -> Void)?
 
     private var listenFD: Int32 = -1
+    /// Inode of the socket file we bound, so stop() never removes a newer
+    /// instance's socket (an old copy quitting during a reinstall did exactly that).
+    private var boundInode: ino_t = 0
     private var source: DispatchSourceRead?
     private let queue = DispatchQueue(label: "com.facemac.auth")
 
@@ -62,6 +65,8 @@ public final class AuthServer {
             return
         }
         chmod(url.path, 0o600)
+        var info = stat()
+        if stat(url.path, &info) == 0 { boundInode = info.st_ino }
         listenFD = fd
 
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
@@ -76,7 +81,11 @@ public final class AuthServer {
         source?.cancel()
         source = nil
         listenFD = -1
-        unlink(Self.socketURL.path)
+        var info = stat()
+        if boundInode != 0, stat(Self.socketURL.path, &info) == 0, info.st_ino == boundInode {
+            unlink(Self.socketURL.path)
+        }
+        boundInode = 0
     }
 
     private func accept() {
