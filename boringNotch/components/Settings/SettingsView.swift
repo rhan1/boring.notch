@@ -48,6 +48,9 @@ struct SettingsView: View {
 //                NavigationLink(value: "Downloads") {
 //                    Label("Downloads", systemImage: "square.and.arrow.down")
 //                }
+                NavigationLink(value: "FaceID") {
+                    Label("Face ID", systemImage: "faceid")
+                }
                 NavigationLink(value: "Shelf") {
                     Label("Shelf", systemImage: "books.vertical")
                 }
@@ -83,6 +86,8 @@ struct SettingsView: View {
                     HUD()
                 case "Battery":
                     Charge()
+                case "FaceID":
+                    FaceIDSettings()
                 case "Shelf":
                     Shelf()
                 case "Shortcuts":

@@ -20,6 +20,7 @@ struct ContentView: View {
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
+    @ObservedObject var faceID = FaceIDModel.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
@@ -212,6 +213,15 @@ struct ContentView: View {
                 }
             }
         }
+        .overlay(alignment: .top) {
+            // Face ID: the closed notch grows down while it scans.
+            FaceIDActivityOverlay()
+        }
+        .onChange(of: faceID.activity) { _, activity in
+            if activity.isVisible && vm.notchState == .open {
+                vm.close()
+            }
+        }
         .padding(.bottom, 8)
         .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
         .compositingGroup()
@@ -358,6 +368,8 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .shelf:
                         ShelfView()
+                    case .faceID:
+                        FaceIDPageView()
                     }
                 }
                 .transition(

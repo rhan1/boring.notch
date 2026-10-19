@@ -38,6 +38,7 @@ struct BoringHeader: View {
 
             HStack(spacing: 4) {
                 if vm.notchState == .open {
+                    FaceIDHeaderButton()
                     if Defaults[.showMirror] {
                         Button(action: {
                             vm.toggleCameraPreview()
